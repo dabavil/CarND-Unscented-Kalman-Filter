@@ -28,10 +28,11 @@ public:
   ///* state covariance matrix
   MatrixXd P_; //done
 
+  //augmented state
   VectorXd x_aug_;
 
-  ///* predicted sigma points matrix
-  MatrixXd Xsig_pred_; 
+  ///* augmented state covariance matrix
+  MatrixXd P_aug_; //done
 
   ///* time when the state is true, in us
   long long time_us_; //done
@@ -71,6 +72,17 @@ public:
   double spread_vector_; //done
 
   float delta_t;
+  float previous_timestamp_;
+
+  // Matrix to store augmented sigma points
+  MatrixXd Xsig_aug_;
+
+  ///* predicted sigma points matrix
+  MatrixXd Xsig_pred_; 
+
+  double NIS_radar_;
+  double NIS_laser_;
+
 
 
   /**
