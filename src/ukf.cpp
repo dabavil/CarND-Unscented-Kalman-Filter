@@ -42,28 +42,31 @@ UKF::UKF() {
   time_us_ = 0.0;
   previous_timestamp_ = 0;
 
-
+  /*
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 0.5; //to be modified to smth more reasonable
+  //const std_a_ = 0.5; //to be modified to smth more reasonable
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 1.0;
+  const std_yawdd_ = 0.2;
 
   // Laser measurement noise standard deviation position1 in m
-  std_laspx_ = 0.15;
+  const std_laspx_ = 0.15;
 
   // Laser measurement noise standard deviation position2 in m
-  std_laspy_ = 0.15;
+  const std_laspy_ = 0.15;
 
   // Radar measurement noise standard deviation radius in m
-  std_radr_ = 0.3;
+  const std_radr_ = 0.3;
 
   // Radar measurement noise standard deviation angle in rad
-  std_radphi_ = 0.03;
+  const std_radphi_ = 0.03;
 
   // Radar measurement noise standard deviation radius change in m/s
-  std_radrd_ = 0.3;
+  const std_radrd_ = 0.3;
 
+  // Very small value for checking DIV/0
+  const RSV = 0.001;
+  */
 
   ///* Weights of sigma points
   weights_ = VectorXd(2*n_aug_+1);
@@ -112,9 +115,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     P_ << 1, 0, 0, 0, 0,
           0, 1, 0, 0, 0,
-          0, 0, 1000, 0, 0,
-          0, 0, 0, 1000, 0,
-          0, 0, 0, 0, 1;
+          0, 0, 10, 0, 0,
+          0, 0, 0, 10, 0,
+          0, 0, 0, 0, 10;
     cout<<"Covar matrix P initialized...\n";
 
 
@@ -133,17 +136,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       cout<<"Initializing based on radar measurement...\n";
 
       float rho = meas_package.raw_measurements_[0]; // Range 
-      cout<<"RHO"<<endl<<rho<<endl;
       float phi = meas_package.raw_measurements_[1]; // Bearing 
       float rho_dot = meas_package.raw_measurements_(2);
 
       float x_in = rho * cos(phi);
       float y_in = rho * sin(phi);
-      float vx_in = rho_dot * cos(phi);
-      float vy_in = rho_dot * sin(phi);
-      float v_in = sqrt(vx_in * vx_in + vy_in * vy_in);
-
-      x_ << x_in, y_in, v_in, 0, 0;
+      x_ << x_in, y_in, 0, 0, 0;
 
 
     } else if(meas_package.sensor_type_ == MeasurementPackage::LASER) 
@@ -158,11 +156,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
     
 
-    if (fabs(x_(0)) < 0.001 and fabs(x_(1)) < 0.001) 
+    if (fabs(x_(0)) < RSV and fabs(x_(1)) < RSV) 
     {
       cout<<"Adjusting for 0 x and y...\n";
-      x_(0) = 0.001;
-      x_(1) = 0.001;
+      x_(0) = RSV;
+      x_(1) = RSV;
     }
 
     previous_timestamp_ = meas_package.timestamp_;
@@ -247,6 +245,7 @@ void UKF::Prediction(double delta_t) {
 
   //now sigma points are stored in the Xsig_aug matrix
   cout<<"Xsig_aug_:  \n"<<Xsig_aug_<<"\n";
+  exit(1);
 
 
   //This section projects the sigma points through the process model
