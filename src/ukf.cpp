@@ -55,10 +55,14 @@ UKF::UKF() {
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
 
 
-  //matrix for lidar update
-  R << std_laspx_*std_laspx_, 0,
+  //noise matrix for lidar update
+  R_lid_ << std_laspx_*std_laspx_, 0,
           0, std_laspy_*std_laspy_;
   
+  //noise matrix for radar update
+  R_rad_ <<    std_radr_*std_radr_, 0, 0,
+          0, std_radphi_*std_radphi_, 0,
+          0, 0,std_radrd_*std_radrd_;
 
 }
 
@@ -328,21 +332,19 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   cout<<"Lidar update started."<<endl;
 
   
-  
-  
   //set the measurements
   VectorXd z = meas_package.raw_measurements_;
   
   //initialize Zsig
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+  MatrixXd Zsig = MatrixXd(n_z_lid_, 2 * n_aug_ + 1);
   Zsig.fill(0.0);
   
   //initialize S
-  MatrixXd S = MatrixXd(n_z, n_z);
+  MatrixXd S = MatrixXd(n_z_lid_, n_z_lid_);
   S.fill(0.0);
   
   //initialize measurement prediction vector
-  VectorXd z_pred = VectorXd(n_z);
+  VectorXd z_pred = VectorXd(n_z_lid_);
   z_pred.fill(0.0);
   
   //transform sig points into measurement space
@@ -368,13 +370,11 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   }
 
   //add measurement noise covariance matrix
-
-  
-  S = S + R;
+  S = S + R_lid_;
   
   //Now Update the State x_ and state covariance P_
   //create matrix for cross correlation Tc
-  MatrixXd Tc = MatrixXd(n_x_, n_z);
+  MatrixXd Tc = MatrixXd(n_x_, n_z_lid_);
   Tc.fill(0.0);
   
   //calculate cross correlation matrix
@@ -424,11 +424,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   cout<<"Radar update started."<<endl;
 
-//set measurement dimension, radar can measure r, phi, and r_dot
-  int n_z = 3;
 
   //create matrix for sigma points in measurement space
-  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+  MatrixXd Zsig = MatrixXd(n_z_rad_, 2 * n_aug_ + 1);
 
   //transform sigma points into measurement space
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  
@@ -436,22 +434,30 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     // extract values for better readibility
     double p_x = Xsig_pred_(0,i);
     double p_y = Xsig_pred_(1,i);
-    double v  = Xsig_pred_(2,i);
-    double yaw = Xsig_pred_(3,i);
+    const double v  = Xsig_pred_(2,i);
+    const double yaw = Xsig_pred_(3,i);
 
-    double v1 = cos(yaw)*v;
-    double v2 = sin(yaw)*v;
+    const double v1 = cos(yaw)*v;
+    const double v2 = sin(yaw)*v;
+
+    //Preventing a special case of zero measurement resultind in div/0 error
+    //If measurement is zero, set both px and py to Really Small Value
+    if(fabs(p_x) < RSV and fabs(p_y) < RSV)
+    {
+      p_x = RSV;
+      p_y = RSV;
+    }
 
     // measurement model
     Zsig(0,i) = sqrt(p_x*p_x + p_y*p_y);                        //r
     Zsig(1,i) = atan2(p_y,p_x);                                 //phi
-    Zsig(2,i) = (p_x*v1 + p_y*v2 ) / sqrt(p_x*p_x + p_y*p_y);   //r_dot
+    Zsig(2,i) = (p_x*v1 + p_y*v2 ) / Zsig(0,i);   //r_dot
   }
 
   cout<<"Projection into measurement model.";
 
   //mean predicted measurement
-  VectorXd z_pred = VectorXd(n_z);
+  VectorXd z_pred = VectorXd(n_z_rad_);
   z_pred.fill(0.0);
   for(int i=0; i < 2*n_aug_+1; i++)
     {
@@ -459,7 +465,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     }
 
   //measurement covariance matrix S
-  MatrixXd S = MatrixXd(n_z,n_z);
+  MatrixXd S = MatrixXd(n_z_rad_,n_z_rad_);
   S.fill(0.0);
   for (int i = 0; i < 2 * n_aug_ + 1; i++)
     {  
@@ -474,17 +480,13 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   }
 
   //add measurement noise covariance matrix
-  MatrixXd R = MatrixXd(n_z,n_z);
-  R <<    std_radr_*std_radr_, 0, 0,
-          0, std_radphi_*std_radphi_, 0,
-          0, 0,std_radrd_*std_radrd_;
-  S = S + R;
+  S = S + R_rad_;
 
 
 ////********************************************
   //Now update the state vector and covariance P
 
-VectorXd z = VectorXd(n_z);
+VectorXd z = VectorXd(n_z_rad_);
 
 float rho = meas_package.raw_measurements_[0]; // Range 
 float phi = meas_package.raw_measurements_[1]; // Bearing 
@@ -494,7 +496,7 @@ z << rho, phi, rho_dot;
 
 
 
-MatrixXd Tc = MatrixXd(n_x_, n_z);
+MatrixXd Tc = MatrixXd(n_x_, n_z_rad_);
 
 
   //calculate cross correlation matrix

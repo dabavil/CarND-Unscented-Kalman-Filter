@@ -61,10 +61,17 @@ public:
   const double RSV = 0.001;
 
   //set measurement dimension, laser can measure px and py
-  const int n_z = 2;
+  const int n_z_lid_ = 2;
 
-  //matrix for lidar update
-  MatrixXd R = MatrixXd(n_z,n_z);
+  //set measurement dimension, radar can measure r, phi, and r_dot
+  const int n_z_rad_ = 3;
+
+  //noise matrix for lidar update
+  MatrixXd R_lid_ = MatrixXd(n_z_lid_,n_z_lid_);
+
+  //noise matrix for radar update
+  MatrixXd R_rad_ = MatrixXd(n_z_rad_,n_z_rad_);
+
 
 
 
