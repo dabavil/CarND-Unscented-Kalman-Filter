@@ -38,36 +38,6 @@ UKF::UKF() {
   lambda_ = 3 - n_aug_;
   spread_vector_ = sqrt(lambda_ + n_aug_);
 
-  //time
-  time_us_ = 0.0;
-  previous_timestamp_ = 0;
-
-  /*
-  // Process noise standard deviation longitudinal acceleration in m/s^2
-  //const std_a_ = 0.5; //to be modified to smth more reasonable
-
-  // Process noise standard deviation yaw acceleration in rad/s^2
-  const std_yawdd_ = 0.2;
-
-  // Laser measurement noise standard deviation position1 in m
-  const std_laspx_ = 0.15;
-
-  // Laser measurement noise standard deviation position2 in m
-  const std_laspy_ = 0.15;
-
-  // Radar measurement noise standard deviation radius in m
-  const std_radr_ = 0.3;
-
-  // Radar measurement noise standard deviation angle in rad
-  const std_radphi_ = 0.03;
-
-  // Radar measurement noise standard deviation radius change in m/s
-  const std_radrd_ = 0.3;
-
-  // Very small value for checking DIV/0
-  const RSV = 0.001;
-  */
-
   ///* Weights of sigma points
   weights_ = VectorXd(2*n_aug_+1);
   weights_.fill(0);
@@ -85,8 +55,9 @@ UKF::UKF() {
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
 
 
-
-
+  //matrix for lidar update
+  R << std_laspx_*std_laspx_, 0,
+          0, std_laspy_*std_laspy_;
   
 
 }
@@ -115,10 +86,15 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     P_ << 1, 0, 0, 0, 0,
           0, 1, 0, 0, 0,
-          0, 0, 10, 0, 0,
-          0, 0, 0, 10, 0,
-          0, 0, 0, 0, 10;
+          0, 0, 1, 0, 0,
+          0, 0, 0, 1, 0,
+          0, 0, 0, 0, 1;
     cout<<"Covar matrix P initialized...\n";
+
+    //Initialize time difference
+    double delta_t = double(meas_package.timestamp_ - time_us_) / 1000000;
+    //Update to most recent time stamp
+      time_us_ = meas_package.timestamp_;
 
 
     //Initialize weights
@@ -128,6 +104,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       weights_(i) = 0.5/(n_aug_+lambda_);
       }
     cout<<"weights_ initialized...\n";
+    cout<<weights_<<endl;
 
     if(meas_package.sensor_type_ == MeasurementPackage::RADAR) 
     {
@@ -151,8 +128,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       cout<<"Initializing based on lidar measurement...\n";
 
       x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0;
-
-
     }
     
 
@@ -163,18 +138,18 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       x_(1) = RSV;
     }
 
-    previous_timestamp_ = meas_package.timestamp_;
+    
     is_initialized_ = true;
     cout<<"INITIALIZATION COMPLETE."<<endl;
 
      
   } //End of initialization
+  else
+  {
 
-  
+    delta_t = double(meas_package.timestamp_ - time_us_) / 1000000;
 
-  //This might be a weird place to implement delta_t - to be checked
-  float delta_t = (meas_package.timestamp_ - previous_timestamp_) / 1000000.0; // delta time in seconds
-  previous_timestamp_ = meas_package.timestamp_;
+    time_us_ = meas_package.timestamp_;
 
 
   Prediction(delta_t);
@@ -188,13 +163,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     
     
   } else 
-
-    {
-    
+    {  
     //Measurement update LIDAR
     UpdateLidar(meas_package);
-    
     }
+
+  } 
 
 cout<<"End of process measurement cycle."<<endl;
 
@@ -245,36 +219,39 @@ void UKF::Prediction(double delta_t) {
 
   //now sigma points are stored in the Xsig_aug matrix
   cout<<"Xsig_aug_:  \n"<<Xsig_aug_<<"\n";
-  exit(1);
+  //exit(1);
 
-
+  
   //This section projects the sigma points through the process model
   //*************************************************************
   //predict sigma points
   for (int i = 0; i< 2*n_aug_+1; i++)
   {
     //extract values for better readability
-    double p_x = Xsig_aug_(0,i);
-    double p_y = Xsig_aug_(1,i);
-    double v = Xsig_aug_(2,i);
-    double yaw = Xsig_aug_(3,i);
-    double yawd = Xsig_aug_(4,i);
-    double nu_a = Xsig_aug_(5,i);
-    double nu_yawdd = Xsig_aug_(6,i);
+    const double p_x = Xsig_aug_(0,i);
+    const double p_y = Xsig_aug_(1,i);
+    const double v = Xsig_aug_(2,i);
+    const double yaw = Xsig_aug_(3,i);
+    const double yawd = Xsig_aug_(4,i);
+    const double nu_a = Xsig_aug_(5,i);
+    const double nu_yawdd = Xsig_aug_(6,i);
 
-    //predicted state values
+    //predicted state values for x and y position
     double px_p, py_p;
 
     //avoid division by zero
-    if (fabs(yawd) > 0.001) {
-        px_p = p_x + v/yawd * ( sin (yaw + yawd*delta_t) - sin(yaw));
-        py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw+yawd*delta_t) );
+    if (fabs(yawd) < RSV) 
+    {
+      px_p = p_x + v * cos(yaw) * delta_t;
+      py_p = p_y + v * sin(yaw) * delta_t;
     }
-    else {
-        px_p = p_x + v*delta_t*cos(yaw);
-        py_p = p_y + v*delta_t*sin(yaw);
+    else 
+    {
+      px_p = p_x + v*delta_t*cos(yaw);
+      py_p = p_y + v*delta_t*sin(yaw);
     }
 
+    //remaining predicted state values
     double v_p = v;
     double yaw_p = yaw + yawd * delta_t;
     double yawd_p = yawd;
@@ -295,8 +272,12 @@ void UKF::Prediction(double delta_t) {
     Xsig_pred_(3,i) = yaw_p;
     Xsig_pred_(4,i) = yawd_p;
   }
+  
 
+
+  cout<<"delta_t: "<<delta_t<<endl;
   cout<<"Xsig_pred_:  \n"<<Xsig_pred_<<"\n";
+  
 
   // now we have a complete set of predicted sigma points stored in the Xsig_pred_ matrix
 
@@ -309,7 +290,7 @@ void UKF::Prediction(double delta_t) {
   x_.fill(0.0);
   for(int i = 0; i < 2 * n_aug_ + 1; i++)  //iterate over sigma points
     {  
-    x_ = weights_(i) * Xsig_pred_.col(i);
+    x_ += weights_(i) * Xsig_pred_.col(i);
     }
 
   //predicted state covariance matrix
@@ -327,6 +308,7 @@ void UKF::Prediction(double delta_t) {
 cout<<"PREDICTION step done. This is the result: "<<endl;
 cout<<"x_ : "<<x_<<endl;
 cout<<"P_: "<<P_<<endl;
+//exit(1);
 }
 
 /**
@@ -345,8 +327,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   cout<<"Lidar update started."<<endl;
 
-  //set measurement dimension, laser can measure px and py
-  int n_z = 2;
+  
+  
   
   //set the measurements
   VectorXd z = meas_package.raw_measurements_;
@@ -386,9 +368,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   }
 
   //add measurement noise covariance matrix
-  MatrixXd R = MatrixXd(n_z,n_z);
-  R <<    std_laspx_*std_laspx_, 0,
-          0, std_laspy_*std_laspy_;
+
+  
   S = S + R;
   
   //Now Update the State x_ and state covariance P_

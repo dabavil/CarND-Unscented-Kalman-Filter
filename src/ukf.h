@@ -41,7 +41,7 @@ public:
   const double std_a_ = 0.5; //done
 
   ///* Process noise standard deviation yaw acceleration in rad/s^2
-  const double std_yawdd_ = 0.15; //done
+  const double std_yawdd_ = 0.2; //done
 
   ///* Laser measurement noise standard deviation position1 in m
   const double std_laspx_ = 0.15; //done
@@ -59,6 +59,14 @@ public:
   const double std_radrd_ = 0.3; //done
 
   const double RSV = 0.001;
+
+  //set measurement dimension, laser can measure px and py
+  const int n_z = 2;
+
+  //matrix for lidar update
+  MatrixXd R = MatrixXd(n_z,n_z);
+
+
 
   ///* Weights of sigma points
   VectorXd weights_;
